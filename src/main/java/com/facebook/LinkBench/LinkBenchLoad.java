@@ -226,8 +226,6 @@ public class LinkBenchLoad implements Runnable {
                          " Different shuffle = " + diffShuffle);
       displayStats(lastDisplayTime, bulkLoad);
     }
-
-    store.close();
   }
 
 

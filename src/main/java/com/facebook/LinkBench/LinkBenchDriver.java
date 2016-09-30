@@ -21,6 +21,7 @@ import com.facebook.LinkBench.LinkBenchRequest.RequestProgress;
 import com.facebook.LinkBench.stats.LatencyStats;
 import com.facebook.LinkBench.stats.SampledStats;
 import com.facebook.LinkBench.util.ClassLoadUtil;
+import edu.berkeley.cs.LinkStoreTitan;
 import org.apache.commons.cli.*;
 import org.apache.log4j.Logger;
 
@@ -221,7 +222,7 @@ public class LinkBenchDriver {
     long expectedNodes = maxid1 - startid1;
     long actualLinks = 0;
     long actualNodes = 0;
-    LinkStore linkStore = createLinkStore();
+    Stores stores = initStores();
 
     double nodeLoadTime_s = 0.0;
     if (genNodes) {
@@ -229,10 +230,9 @@ public class LinkBenchDriver {
       LatencyStats nodeLatencyStats = new LatencyStats(nNodeLoaders);
       List<Runnable> nodeLoaders = new ArrayList<>(nNodeLoaders);
       for (int i = 0; i < nNodeLoaders; i++) {
-        NodeStore nodeStore = createNodeStore(linkStore);
         Random rng = new Random(masterRandom.nextLong());
         nodeLoaders
-          .add(new NodeLoader(props, logger, nodeStore, rng, nodeLatencyStats, csvStreamFile, i));
+          .add(new NodeLoader(props, logger, stores.nodeStore, rng, nodeLatencyStats, csvStreamFile, i));
       }
 
       // run node loaders
@@ -258,8 +258,8 @@ public class LinkBenchDriver {
 
     LoadProgress loadTracker = LoadProgress.create(logger, props);
     for (int i = 0; i < nLoaders; i++) {
-      bulkLoad = bulkLoad && linkStore.bulkLoadBatchSize() > 0;
-      LinkBenchLoad l = new LinkBenchLoad(linkStore, props, linkLatencyStats, csvStreamFile, i,
+      bulkLoad = bulkLoad && stores.linkStore.bulkLoadBatchSize() > 0;
+      LinkBenchLoad l = new LinkBenchLoad(stores.linkStore, props, linkLatencyStats, csvStreamFile, i,
         maxid1 == startid1 + 1, chunk_q, loadTracker);
       linkLoaders.add(l);
     }
@@ -290,6 +290,8 @@ public class LinkBenchDriver {
         " Loaded %d links (%.2f links per node). " +
         " Took %.1f seconds.  Links/second = %d", actualNodes, expectedNodes, actualLinks,
       actualLinks / (double) actualNodes, totLoadTime_s, Math.round(actualLinks / linkLoadTime_s)));
+
+    closeStores(stores);
   }
 
   /**
@@ -390,6 +392,8 @@ public class LinkBenchDriver {
     progress.startTimer();
     // run requesters
     concurrentExec(requesters);
+    ((LinkStoreTitan) stores.linkStore).writeQueriesPerEdge();
+    ((LinkStoreTitan) stores.nodeStore).writeQueriesPerNode();
     closeStores(stores);
 
     long finishTime = System.currentTimeMillis();
